@@ -75,10 +75,12 @@ class CameraHolder(private val context: Context) {
         requestRestartOpen = true
     }
 
-    fun getPreviewSize(): Array<out Size>? {
-        return cameraManager.getCameraCharacteristics(cameraId)
-            .get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
-            ?.getOutputSizes(SurfaceTexture::class.java)
+    fun getPreviewSize(block: (sizes: Array<out Size>?) -> Unit) = runInCameraThread {
+        block.invoke(
+            cameraManager.getCameraCharacteristics(cameraId)
+                .get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+                ?.getOutputSizes(SurfaceTexture::class.java)
+        )
     }
 
     fun getRotation() = sensorOrientation
@@ -150,9 +152,6 @@ class CameraHolder(private val context: Context) {
                 }
                 requestRestartPreview = false
                 requestRestartOpen = false
-                if (requestRelease) {
-                    handlerThread.quitSafely()
-                }
             } finally {
                 Log.d(TAG, "invalidate release")
                 invalidateBlockSemaphore.release()
@@ -187,6 +186,13 @@ class CameraHolder(private val context: Context) {
                 Log.d(TAG, "onError $camera")
                 camera.close()
                 it.resumeWithException(RuntimeException("onError"))
+            }
+
+            override fun onClosed(camera: CameraDevice) {
+                super.onClosed(camera)
+                if (requestRelease) {
+                    handlerThread.quitSafely()
+                }
             }
         }, handler)
     }
